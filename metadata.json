@@ -1,0 +1,6 @@
+{
+  "name": "CryptoExchange Demo",
+  "description": "Plataforma web demonstrativa de corretora de criptomoedas com cotações em tempo real, carteira virtual simulada, gráficos e painel de negociação.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
