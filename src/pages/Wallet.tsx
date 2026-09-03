@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, PlusCircle } from 'lucide-react';
 import { getMarket, type Holding, type Transaction } from '../data';
 import { money, type Currency } from '../utils';
 import QuickActions from '../components/QuickActions';
@@ -7,6 +7,7 @@ import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
 import SwapModal from '../components/SwapModal';
 import TransactionRow from '../components/TransactionRow';
+import AddTransactionModal from '../components/AddTransactionModal';
 
 interface WalletProps {
   hideBalance: boolean;
@@ -16,10 +17,12 @@ interface WalletProps {
   transactions: Transaction[];
   onSendConfirm: (assetId: string, amount: number, address: string) => void;
   onSwapConfirm: (fromId: string, fromAmount: number, toId: string, toAmount: number) => void;
+  onAddManualTransaction: (tx: Transaction, adjustBalance: boolean) => void;
+  onDeleteTransaction: (id: string) => void;
 }
 
 type Tab = 'assets' | 'activity';
-type ActiveModal = 'receive' | 'send' | 'swap' | null;
+type ActiveModal = 'receive' | 'send' | 'swap' | 'add' | null;
 
 const allocationColors = ['bg-white', 'bg-white/70', 'bg-white/45', 'bg-white/25', 'bg-white/15'];
 
@@ -27,6 +30,7 @@ export default function Wallet({
   hideBalance, setHideBalance, currency,
   holdings, transactions,
   onSendConfirm, onSwapConfirm,
+  onAddManualTransaction, onDeleteTransaction,
 }: WalletProps) {
   const [tab, setTab] = useState<Tab>('assets');
   const [modal, setModal] = useState<ActiveModal>(null);
@@ -152,12 +156,20 @@ export default function Wallet({
         </section>
       ) : (
         <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
-          <h2 className="font-semibold">Histórico de transações</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Histórico de transações</h2>
+            <button
+              onClick={() => setModal('add')}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:border-white/20 hover:text-white"
+            >
+              <PlusCircle size={13} /> Nova transação (demo)
+            </button>
+          </div>
           <div className="mt-4 space-y-2.5">
             {transactions.length === 0 ? (
               <p className="text-sm text-white/35">Nenhuma transação ainda.</p>
             ) : (
-              transactions.map(tx => <TransactionRow key={tx.id} tx={tx} />)
+              transactions.map(tx => <TransactionRow key={tx.id} tx={tx} onDelete={onDeleteTransaction} />)
             )}
           </div>
         </section>
@@ -169,6 +181,9 @@ export default function Wallet({
       )}
       {modal === 'swap' && (
         <SwapModal onClose={() => setModal(null)} holdings={owned} onConfirm={onSwapConfirm} currency={currency} />
+      )}
+      {modal === 'add' && (
+        <AddTransactionModal onClose={() => setModal(null)} onAdd={onAddManualTransaction} />
       )}
     </>
   );

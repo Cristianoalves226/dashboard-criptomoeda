@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, Check, Clock, Copy, Repeat } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Check, Clock, Copy, Repeat, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { getMarket, type Transaction } from '../data';
 import { formatRelativeTime, truncateMiddle } from '../utils';
@@ -9,7 +9,12 @@ const statusMeta: Record<Transaction['status'], { label: string; className: stri
   failed: { label: 'Falhou', className: 'bg-red-400/10 text-red-300' },
 };
 
-export default function TransactionRow({ tx }: { tx: Transaction }) {
+interface TransactionRowProps {
+  tx: Transaction;
+  onDelete?: (id: string) => void;
+}
+
+export default function TransactionRow({ tx, onDelete }: TransactionRowProps) {
   const [copied, setCopied] = useState(false);
   const asset = getMarket(tx.assetId);
   const toAsset = tx.toAssetId ? getMarket(tx.toAssetId) : null;
@@ -65,6 +70,11 @@ export default function TransactionRow({ tx }: { tx: Transaction }) {
           {copied ? <Check size={11} /> : <Copy size={11} />}
           {truncateMiddle(tx.hash, 6, 4)}
         </button>
+        {onDelete && (
+          <button onClick={() => onDelete(tx.id)} className="shrink-0 rounded-lg p-1.5 text-white/25 hover:bg-red-400/10 hover:text-red-300" title="Remover transação">
+            <Trash2 size={13} />
+          </button>
+        )}
       </div>
     </div>
   );

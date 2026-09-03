@@ -86,6 +86,18 @@ export default function App() {
     });
   }
 
+  function handleAddManualTransaction(tx: Transaction, adjustBalance: boolean) {
+    if (adjustBalance) {
+      const delta = tx.type === 'receive' ? tx.amount : -tx.amount;
+      applyDelta(tx.assetId, delta);
+    }
+    setTransactions(prev => [tx, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+  }
+
+  function handleDeleteTransaction(id: string) {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+  }
+
   return (
     <div className="min-h-screen bg-[#070a0f] text-white font-sans">
       <Header mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} goToMarkets={goToMarkets} setPage={changePage} />
@@ -106,6 +118,8 @@ export default function App() {
               transactions={transactions}
               onSendConfirm={handleSendConfirm}
               onSwapConfirm={handleSwapConfirm}
+              onAddManualTransaction={handleAddManualTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
           {page === 'markets' && (

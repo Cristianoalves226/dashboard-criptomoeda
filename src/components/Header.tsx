@@ -33,8 +33,7 @@ export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage
             {mobileOpen ? <X /> : <Menu />}
           </button>
           <button className="flex items-center gap-3" onClick={() => setPage('overview')}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-black font-black">₿</div>
-            <div className="text-lg font-bold tracking-tight">Crypto<span className="text-white/50">Desk</span></div>
+            <img src="/assets/kast-logo.png" alt="KAST" className="h-6 w-auto md:h-7" />
           </button>
         </div>
 
