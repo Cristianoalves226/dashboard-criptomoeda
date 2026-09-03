@@ -38,6 +38,23 @@ export const holdings: Holding[] = [
   { id: 'usdc', amount: 1250 },
 ];
 
+export interface ReceiveAddress {
+  network: string;
+  symbol: string;
+  address: string;
+}
+
+// Endereços de recebimento — apenas para fins DEMONSTRATIVOS da interface
+export const receiveAddresses: ReceiveAddress[] = [
+  { network: 'Ethereum', symbol: 'ETH', address: '0xd9De97C4C761caD82d9ffEa022ED2Ea2EeC6D93D' },
+  { network: 'Bitcoin', symbol: 'BTC', address: 'bc1qk5fmz7xrr8g2nee9lwukvlwf5lrudannerh5hz' },
+  { network: 'Solana', symbol: 'SOL', address: '9hdctqumnvNGH15iJvx2TpVf6M3yFT3kS7mjdTWakPJV' },
+  { network: 'Tron', symbol: 'TRX', address: 'TTztnUpZQFneZbrxhkxLzvynPmcfRxtfMj' },
+  { network: 'Polygon', symbol: 'MATIC', address: '0xd9De97C4C761caD82d9ffEa022ED2Ea2EeC6D93D' },
+  { network: 'BNB Smart Chain', symbol: 'BNB', address: '0xd9De97C4C761caD82d9ffEa022ED2Ea2EeC6D93D' },
+  { network: 'USDT (Solana)', symbol: 'USDT', address: 'D6h24fWJyamwfphHojBnmNcEKttMLQWCNzzgAnqaSzXk' },
+];
+
 export function getMarket(id: string): MarketAsset {
   const found = markets.find(m => m.id === id);
   if (!found) throw new Error(`Ativo desconhecido: ${id}`);

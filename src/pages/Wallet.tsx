@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { holdings, getMarket } from '../data';
+import { holdings, getMarket, receiveAddresses } from '../data';
 import { money, type Currency } from '../utils';
+import AddressRow from '../components/AddressRow';
 
 interface WalletProps {
   hideBalance: boolean;
@@ -94,6 +95,21 @@ export default function Wallet({ hideBalance, setHideBalance, currency }: Wallet
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Receber</h2>
+            <p className="mt-1 text-xs text-white/40">Endereços de demonstração — não envie ativos reais para eles.</p>
+          </div>
+          <span className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">MODO DEMO</span>
+        </div>
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+          {receiveAddresses.map(addr => (
+            <AddressRow key={addr.network} {...addr} />
+          ))}
         </div>
       </section>
     </>
