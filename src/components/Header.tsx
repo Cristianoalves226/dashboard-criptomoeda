@@ -33,7 +33,7 @@ export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage
             {mobileOpen ? <X /> : <Menu />}
           </button>
           <button className="flex items-center gap-3" onClick={() => setPage('overview')}>
-            <img src="/assets/kast-logo.png" alt="KAST" className="h-6 w-auto md:h-7" />
+            <img src={`${import.meta.env.BASE_URL}assets/kast-logo.png`} alt="KAST" className="h-6 w-auto md:h-7" />
           </button>
         </div>
 
