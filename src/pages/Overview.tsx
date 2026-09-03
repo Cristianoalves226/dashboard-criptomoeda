@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowUpRight, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
-import { holdings, getMarket } from '../data';
+import { getMarket, type Holding } from '../data';
 import { money, type Currency } from '../utils';
 import type { Page } from '../App';
 
@@ -14,13 +14,13 @@ interface OverviewProps {
   setHideBalance: (v: boolean) => void;
   currency: Currency;
   setPage: (p: Page) => void;
+  holdings: Holding[];
 }
 
-export default function Overview({ hideBalance, setHideBalance, currency, setPage }: OverviewProps) {
+export default function Overview({ hideBalance, setHideBalance, currency, setPage, holdings }: OverviewProps) {
   const [period, setPeriod] = useState('7D');
-  const [selected, setSelected] = useState('btc');
-
-  const owned = useMemo(() => holdings.map(h => ({ ...h, market: getMarket(h.id) })), []);
+  const owned = useMemo(() => holdings.map(h => ({ ...h, market: getMarket(h.id) })), [holdings]);
+  const [selected, setSelected] = useState(holdings[0]?.id ?? 'btc');
   const portfolio = useMemo(() => owned.reduce((sum, h) => sum + h.amount * h.market.price, 0), [owned]);
   const selectedMarket = getMarket(selected);
   const selectedHolding = owned.find(h => h.id === selected);

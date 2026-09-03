@@ -6,6 +6,7 @@ import Wallet from './pages/Wallet';
 import Markets from './pages/Markets';
 import Settings from './pages/Settings';
 import type { Currency } from './utils';
+import { initialHoldings, initialTransactions, generateTxHash, type Holding, type Transaction } from './data';
 
 export type Page = 'overview' | 'wallet' | 'markets' | 'settings';
 
@@ -20,6 +21,24 @@ export default function App() {
   const [currency, setCurrency] = useState<Currency>('USD');
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(false);
+
+  // Saldos e histórico — compartilhados entre Visão geral e Carteira
+  const [holdings, setHoldings] = useState<Holding[]>(initialHoldings);
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+
+  function addTransaction(tx: Transaction) {
+    setTransactions(prev => [tx, ...prev]);
+  }
+
+  function applyDelta(assetId: string, delta: number) {
+    setHoldings(prev => {
+      const exists = prev.some(h => h.id === assetId);
+      if (exists) {
+        return prev.map(h => (h.id === assetId ? { ...h, amount: Math.max(0, h.amount + delta) } : h));
+      }
+      return delta > 0 ? [...prev, { id: assetId, amount: delta }] : prev;
+    });
+  }
 
   function handleSetHideBalanceDefault(value: boolean) {
     setHideBalanceDefault(value);
@@ -37,6 +56,36 @@ export default function App() {
     setMobileOpen(false);
   }
 
+  function handleSendConfirm(assetId: string, amount: number, address: string) {
+    applyDelta(assetId, -amount);
+    addTransaction({
+      id: `t${Date.now()}`,
+      type: 'send',
+      assetId,
+      amount,
+      counterparty: address,
+      hash: generateTxHash(),
+      status: 'confirmed',
+      timestamp: Date.now(),
+    });
+  }
+
+  function handleSwapConfirm(fromId: string, fromAmount: number, toId: string, toAmount: number) {
+    applyDelta(fromId, -fromAmount);
+    applyDelta(toId, toAmount);
+    addTransaction({
+      id: `t${Date.now()}`,
+      type: 'swap',
+      assetId: fromId,
+      amount: fromAmount,
+      toAssetId: toId,
+      toAmount,
+      hash: generateTxHash(),
+      status: 'confirmed',
+      timestamp: Date.now(),
+    });
+  }
+
   return (
     <div className="min-h-screen bg-[#070a0f] text-white font-sans">
       <Header mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} goToMarkets={goToMarkets} setPage={changePage} />
@@ -46,10 +95,18 @@ export default function App() {
 
         <main className="min-w-0 flex-1 p-4 md:p-8">
           {page === 'overview' && (
-            <Overview hideBalance={hideBalance} setHideBalance={setHideBalance} currency={currency} setPage={changePage} />
+            <Overview hideBalance={hideBalance} setHideBalance={setHideBalance} currency={currency} setPage={changePage} holdings={holdings} />
           )}
           {page === 'wallet' && (
-            <Wallet hideBalance={hideBalance} setHideBalance={setHideBalance} currency={currency} />
+            <Wallet
+              hideBalance={hideBalance}
+              setHideBalance={setHideBalance}
+              currency={currency}
+              holdings={holdings}
+              transactions={transactions}
+              onSendConfirm={handleSendConfirm}
+              onSwapConfirm={handleSwapConfirm}
+            />
           )}
           {page === 'markets' && (
             <div key={marketsQuery}>

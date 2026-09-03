@@ -20,6 +20,7 @@ export const markets: MarketAsset[] = [
   { id: 'eth', name: 'Ethereum', symbol: 'ETH', price: 4268.72, change: 1.92, marketCap: 514_000_000_000, icon: 'Ξ', spark: [50, 48, 53, 51, 55, 52, 58, 56, 61, 59, 63, 60, 65, 62, 67] },
   { id: 'sol', name: 'Solana', symbol: 'SOL', price: 204.38, change: -0.74, marketCap: 98_600_000_000, icon: 'S', spark: [60, 63, 61, 58, 62, 59, 56, 60, 57, 54, 58, 55, 52, 56, 53] },
   { id: 'usdc', name: 'USD Coin', symbol: 'USDC', price: 1.0, change: 0.01, marketCap: 41_200_000_000, icon: '$', spark: [50, 50, 51, 50, 49, 50, 50, 51, 50, 50, 49, 50, 50, 51, 50] },
+  { id: 'usdt', name: 'Tether', symbol: 'USDT', price: 1.0, change: 0.02, marketCap: 118_500_000_000, icon: '₮', spark: [50, 50, 50, 51, 50, 49, 50, 50, 51, 50, 50, 49, 50, 50, 51] },
   { id: 'bnb', name: 'BNB', symbol: 'BNB', price: 970.15, change: 1.35, marketCap: 141_300_000_000, icon: 'B', spark: [45, 47, 46, 49, 48, 51, 49, 53, 51, 55, 53, 57, 55, 58, 56] },
   { id: 'xrp', name: 'XRP', symbol: 'XRP', price: 2.14, change: -1.08, marketCap: 124_800_000_000, icon: 'X', spark: [55, 54, 56, 53, 55, 52, 54, 51, 53, 50, 52, 49, 51, 48, 50] },
   { id: 'ada', name: 'Cardano', symbol: 'ADA', price: 0.68, change: 3.21, marketCap: 24_500_000_000, icon: 'A', spark: [40, 41, 43, 42, 45, 44, 47, 46, 49, 48, 51, 50, 53, 52, 55] },
@@ -30,12 +31,61 @@ export const markets: MarketAsset[] = [
   { id: 'ltc', name: 'Litecoin', symbol: 'LTC', price: 112.4, change: 0.88, marketCap: 8_700_000_000, icon: 'Ł', spark: [46, 47, 46, 48, 47, 49, 48, 50, 49, 48, 50, 49, 51, 50, 52] },
 ];
 
-// Ativos que a conta demo "possui" — referenciam markets por id
-export const holdings: Holding[] = [
+// Ativos que a conta demo "possui" ao iniciar — referenciam markets por id
+export const initialHoldings: Holding[] = [
   { id: 'btc', amount: 0.1842 },
   { id: 'eth', amount: 1.842 },
   { id: 'sol', amount: 12.5 },
   { id: 'usdc', amount: 1250 },
+  { id: 'usdt', amount: 2000 },
+];
+
+// Taxa de rede estimada (em USD) por ativo — apenas ilustrativo
+export const networkFees: Record<string, number> = {
+  btc: 1.85,
+  eth: 2.4,
+  sol: 0.0025,
+  usdc: 0.35,
+  usdt: 0.4,
+};
+
+export const swapFeeRate = 0.003; // 0,3%
+
+export interface Transaction {
+  id: string;
+  type: 'receive' | 'send' | 'swap';
+  assetId: string;
+  amount: number;
+  toAssetId?: string;
+  toAmount?: number;
+  counterparty?: string;
+  hash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  timestamp: number;
+}
+
+function hex(len: number) {
+  const chars = '0123456789abcdef';
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+export function generateTxHash() {
+  return `0x${hex(64)}`;
+}
+
+const now = Date.now();
+const day = 86_400_000;
+
+// Histórico inicial simulado
+export const initialTransactions: Transaction[] = [
+  { id: 't0', type: 'receive', assetId: 'usdt', amount: 2000, counterparty: 'D6h24fWJyamwfphHojBnmNcEKttMLQWCNzzgAnqaSzXk', hash: generateTxHash(), status: 'confirmed', timestamp: now - 1000 * 60 * 3 },
+  { id: 't1', type: 'receive', assetId: 'usdc', amount: 500, counterparty: 'D6h24fWJyamwfphHojBnmNcEKttMLQWCNzzgAnqaSzXk', hash: generateTxHash(), status: 'confirmed', timestamp: now - 1000 * 60 * 12 },
+  { id: 't2', type: 'send', assetId: 'eth', amount: 0.05, counterparty: '0x8f3aCe1bC29d9E4a17F02D6c9B441d5E7c3aA210', hash: generateTxHash(), status: 'confirmed', timestamp: now - 1000 * 60 * 90 },
+  { id: 't3', type: 'swap', assetId: 'sol', amount: 3, toAssetId: 'usdc', toAmount: 611.3, hash: generateTxHash(), status: 'confirmed', timestamp: now - day },
+  { id: 't4', type: 'receive', assetId: 'btc', amount: 0.012, counterparty: 'bc1qk5fmz7xrr8g2nee9lwukvlwf5lrudannerh5hz', hash: generateTxHash(), status: 'confirmed', timestamp: now - day * 2 },
+  { id: 't5', type: 'send', assetId: 'usdc', amount: 120, counterparty: 'TTztnUpZQFneZbrxhkxLzvynPmcfRxtfMj', hash: generateTxHash(), status: 'confirmed', timestamp: now - day * 4 },
 ];
 
 export interface ReceiveAddress {
