@@ -108,10 +108,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      <footer className="border-t border-white/10 px-4 py-4 text-center text-xs text-white/45">
-        KAST • Plataforma de cripto
-      </footer>
     </div>
   );
 }

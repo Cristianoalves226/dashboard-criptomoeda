@@ -131,8 +131,6 @@ export default function Overview({ hideBalance, setHideBalance, currency, setPag
           ))}
         </div>
       </section>
-
-      <footer className="py-8 text-center text-xs text-white/25">KAST • Plataforma de cripto</footer>
     </>
   );
 }
