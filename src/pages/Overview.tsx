@@ -32,7 +32,7 @@ export default function Overview({ hideBalance, setHideBalance, currency, setPag
           <p className="text-sm text-white/40 capitalize">{today}</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Visão geral</h1>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-white/50">● Mercado simulado ativo</div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-white/50">● Mercado ativo</div>
       </div>
 
       <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr]">
