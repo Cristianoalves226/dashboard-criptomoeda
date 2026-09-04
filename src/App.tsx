@@ -66,10 +66,10 @@ export default function App() {
     setTransactions(prev => prev.filter(t => t.id !== id));
   }
   return (
-    <div className="min-h-screen bg-[#070a0f] text-white font-sans">
+    <div className="min-h-screen bg-[#070a0f] text-white font-sans flex flex-col">
       <Header mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} goToMarkets={goToMarkets} setPage={changePage} />
 
-      <div className="mx-auto flex max-w-[1500px]">
+      <div className="mx-auto flex max-w-[1500px] flex-1 w-full">
         <Sidebar page={page} setPage={changePage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
 
         <main className="min-w-0 flex-1 p-4 md:p-8">
@@ -108,6 +108,10 @@ export default function App() {
           )}
         </main>
       </div>
+
+      <footer className="border-t border-white/10 px-4 py-4 text-center text-xs text-white/45">
+        KAST • Plataforma de cripto
+      </footer>
     </div>
   );
 }
