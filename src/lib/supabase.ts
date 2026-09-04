@@ -1,3 +1,9 @@
+console.log('SUPABASE URL:', import.meta.env.VITE_SUPABASE_URL);
+console.log('SUPABASE KEY length:', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.length);
+console.log('SUPABASE KEY starts with:', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.slice(0, 20));
+
+
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
