@@ -282,20 +282,8 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             </button>
           </form>
 
-          {/* Atalho de acesso Admin para testes */}
-          <div className="mt-5 border-t border-white/10 pt-4 text-center">
-            <button
-              type="button"
-              onClick={handleQuickAdminLogin}
-              className="inline-flex items-center gap-1.5 text-xs text-emerald-400/80 hover:text-emerald-300 transition-colors"
-            >
-              <ShieldAlert size={14} />
-              <span>Acesso Rápido de Administrador (admin@kast.com)</span>
-            </button>
-          </div>
-
           {/* Destaque de segurança */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-white/40">
+          <div className="mt-6 border-t border-white/10 pt-4 flex items-center justify-center gap-2 text-xs text-white/40">
             <ShieldCheck size={14} className="text-emerald-400" />
             <span>Dados salvos com segurança local</span>
           </div>
