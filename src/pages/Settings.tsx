@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Toggle from '../components/Toggle';
 import type { Currency } from '../utils';
+import type { UserProfile } from './AuthPage';
 
 interface SettingsProps {
   currency: Currency;
@@ -11,6 +12,8 @@ interface SettingsProps {
   setPriceAlerts: (v: boolean) => void;
   emailUpdates: boolean;
   setEmailUpdates: (v: boolean) => void;
+  user?: UserProfile | null;
+  onUpdateUser?: (updated: Partial<UserProfile>) => void;
 }
 
 export default function Settings({
@@ -18,13 +21,25 @@ export default function Settings({
   hideBalanceDefault, setHideBalanceDefault,
   priceAlerts, setPriceAlerts,
   emailUpdates, setEmailUpdates,
+  user,
+  onUpdateUser,
 }: SettingsProps) {
-  const [name, setName] = useState('Cristiano Alves');
-  const [email, setEmail] = useState('cristiano@exemplo.com');
+  const [name, setName] = useState(user?.name || 'Cristiano Alves');
+  const [email, setEmail] = useState(user?.email || 'cristiano@exemplo.com');
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name);
+      setEmail(user.email);
+    }
+  }, [user]);
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (onUpdateUser) {
+      onUpdateUser({ name: name.trim(), email: email.trim() });
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }

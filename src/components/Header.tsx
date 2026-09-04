@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { Bell, ChevronDown, Menu, Search, X } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Menu, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import type { Page } from '../App';
+import type { UserProfile } from '../pages/AuthPage';
 
 interface HeaderProps {
   mobileOpen: boolean;
   setMobileOpen: (v: boolean) => void;
   goToMarkets: (query: string) => void;
   setPage: (p: Page) => void;
+  user?: UserProfile | null;
+  onLogout?: () => void;
 }
 
 const notifications = [
@@ -15,7 +18,7 @@ const notifications = [
   { title: 'Depósito de 500 USDC confirmado', time: 'há 3h' },
 ];
 
-export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage }: HeaderProps) {
+export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage, user, onLogout }: HeaderProps) {
   const [query, setQuery] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -24,6 +27,17 @@ export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage
     e.preventDefault();
     if (query.trim()) goToMarkets(query.trim());
   }
+
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map(p => p[0].toUpperCase())
+        .slice(0, 2)
+        .join('')
+    : 'US';
+
+  const displayName = user?.name || 'Minha conta';
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070a0f]/90 backdrop-blur-xl">
@@ -72,24 +86,42 @@ export default function Header({ mobileOpen, setMobileOpen, goToMarkets, setPage
 
           <div className="relative">
             <button
-              className="flex items-center gap-2 rounded-xl border border-white/10 px-2.5 py-1.5"
+              className="flex items-center gap-2 rounded-xl border border-white/10 px-2.5 py-1.5 hover:border-white/20 transition-colors"
               onClick={() => { setAccountOpen(!accountOpen); setNotifOpen(false); }}
             >
-              <div className="h-7 w-7 rounded-lg bg-white/10 flex items-center justify-center text-xs font-bold">CA</div>
-              <span className="hidden sm:block text-sm">Minha conta</span>
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 flex items-center justify-center text-xs font-bold">
+                {initials}
+              </div>
+              <span className="hidden sm:block text-sm max-w-[120px] truncate">{displayName}</span>
               <ChevronDown size={15} className="text-white/40" />
             </button>
             {accountOpen && (
-              <div className="absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-[#0b0f16] p-1.5 shadow-xl">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-white/10 bg-[#0b0f16] p-2 shadow-2xl">
+                {user && (
+                  <div className="px-3 py-2 border-b border-white/10 mb-1">
+                    <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                    <p className="text-xs text-white/40 truncate">{user.email}</p>
+                  </div>
+                )}
                 <button
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/5"
+                  className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/5 transition-colors"
                   onClick={() => { setPage('settings'); setAccountOpen(false); }}
                 >
+                  <SettingsIcon size={15} className="text-white/40" />
                   Configurações
                 </button>
-                <button className="w-full rounded-lg px-3 py-2 text-left text-sm text-white/40 cursor-not-allowed">
-                  Sair (indisponível no modo demo)
-                </button>
+                {onLogout && (
+                  <button
+                    className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-red-300 hover:bg-red-500/10 transition-colors"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      onLogout();
+                    }}
+                  >
+                    <LogOut size={15} className="text-red-400" />
+                    Sair da conta
+                  </button>
+                )}
               </div>
             )}
           </div>
