@@ -111,22 +111,12 @@ export default function Overview({ hideBalance, setHideBalance, currency, setPag
           </div>
           <div className="mt-5 space-y-2">
             {owned.map(({ id, amount, market }) => (
-              <button
-                key={id}
-                onClick={() => setSelected(id)}
-                className={`flex w-full items-center justify-between rounded-xl p-3 text-left transition ${selected === id ? 'bg-white/10' : 'hover:bg-white/5'}`}
-              >
+              <button key={id} onClick={() => setSelected(id)} className={`flex w-full items-center justify-between rounded-xl p-3 text-left transition ${selected === id ? 'bg-white/10' : 'hover:bg-white/5'}`}>
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 font-bold">{market.icon}</div>
-                  <div>
-                    <p className="text-sm font-medium">{market.name}</p>
-                    <p className="text-xs text-white/35">{amount} {market.symbol}</p>
-                  </div>
+                  <div><p className="text-sm font-medium">{market.name}</p><p className="text-xs text-white/35">{amount} {market.symbol}</p></div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">{hideBalance ? '••••••' : money(amount * market.price, currency)}</p>
-                  <p className={`text-xs ${market.change >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{market.change >= 0 ? '+' : ''}{market.change}%</p>
-                </div>
+                <div className="text-right"><p className="text-sm font-medium">{hideBalance ? '••••••' : money(amount * market.price, currency)}</p><p className={`text-xs ${market.change >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{market.change >= 0 ? '+' : ''}{market.change}%</p></div>
               </button>
             ))}
           </div>
@@ -134,25 +124,15 @@ export default function Overview({ hideBalance, setHideBalance, currency, setPag
       </section>
 
       <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Mercados em destaque</h2>
-          <button className="text-xs text-white/40 hover:text-white" onClick={() => setPage('markets')}>Ver todos os mercados</button>
-        </div>
+        <div className="flex items-center justify-between"><h2 className="font-semibold">Mercados em destaque</h2><button className="text-xs text-white/40 hover:text-white" onClick={() => setPage('markets')}>Ver todos os mercados</button></div>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {owned.map(({ id, market }) => (
-            <div key={id} className="rounded-xl border border-white/10 bg-black/10 p-4">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{market.symbol}/USD</span>
-                <span className={`text-xs ${market.change >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{market.change >= 0 ? '+' : ''}{market.change}%</span>
-              </div>
-              <p className="mt-3 text-lg font-semibold">{money(market.price, currency)}</p>
-              <div className="mt-3 h-1 rounded-full bg-white/10"><div className="h-full w-3/4 rounded-full bg-white/70" /></div>
-            </div>
+            <div key={id} className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="flex items-center justify-between"><span className="font-medium">{market.symbol}/USD</span><span className={`text-xs ${market.change >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{market.change >= 0 ? '+' : ''}{market.change}%</span></div><p className="mt-3 text-lg font-semibold">{money(market.price, currency)}</p><div className="mt-3 h-1 rounded-full bg-white/10"><div className="h-full w-3/4 rounded-full bg-white/70" /></div></div>
           ))}
         </div>
       </section>
 
-      <footer className="py-8 text-center text-xs text-white/25">KAST • Plataforma demonstrativa • Sem operações financeiras reais</footer>
+      <footer className="py-8 text-center text-xs text-white/25">KAST • Plataforma de cripto</footer>
     </>
   );
 }
