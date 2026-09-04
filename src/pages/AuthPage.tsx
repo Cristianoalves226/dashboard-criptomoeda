@@ -1,54 +1,13 @@
 import { useState } from 'react';
-import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
-
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'user';
-  createdAt: number;
-}
+import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getProfile, type UserProfile } from '../lib/database';
 
 interface AuthPageProps {
   onLoginSuccess: (user: UserProfile, isNewUser?: boolean) => void;
 }
 
-const USERS_KEY = 'cryptodesk-registered-users-v1';
-
-export function getRegisteredUsers(): UserProfile[] {
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveRegisteredUser(user: UserProfile) {
-  const users = getRegisteredUsers().filter(u => u.id !== user.id && u.email.toLowerCase() !== user.email.toLowerCase());
-  users.push(user);
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-export function deleteRegisteredUser(userId: string) {
-  const users = getRegisteredUsers().filter(u => u.id !== userId);
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-function determineRole(email: string): 'admin' | 'user' {
-  const lower = email.trim().toLowerCase();
-  if (
-    lower === 'admin@kast.com' ||
-    lower.startsWith('admin@') ||
-    lower === 'c.alvesdecampos@gmail.com' ||
-    lower.includes('admin')
-  ) {
-    return 'admin';
-  }
-  return 'user';
-}
+export type { UserProfile };
 
 export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<'register' | 'login'>('register');
@@ -59,9 +18,14 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!isSupabaseConfigured || !supabase) {
+      setError('Supabase não está configurado. Verifique as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.');
+      return;
+    }
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
@@ -71,16 +35,14 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
       return;
     }
 
-    if (!password || password.length < 4) {
-      setError('A senha deve ter pelo menos 4 caracteres.');
+    if (!password || password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 
     setLoading(true);
 
-    setTimeout(() => {
-      const role = determineRole(cleanEmail);
-
+    try {
       if (mode === 'register') {
         if (!cleanName) {
           setError('Por favor, informe seu nome completo.');
@@ -93,58 +55,88 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           return;
         }
 
-        const newUser: UserProfile = {
-          id: `u_${Date.now()}`,
-          name: cleanName,
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
-          role,
-          createdAt: Date.now(),
-        };
+          password,
+          options: {
+            data: { name: cleanName },
+          },
+        });
 
-        saveRegisteredUser(newUser);
-        setLoading(false);
-        onLoginSuccess(newUser, true);
-      } else {
-        const existingUsers = getRegisteredUsers();
-        const found = existingUsers.find(u => u.email.toLowerCase() === cleanEmail);
+        if (signUpError) {
+          setError(signUpError.message);
+          setLoading(false);
+          return;
+        }
 
-        const user: UserProfile = found || {
-          id: `u_${Date.now()}`,
-          name: cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          email: cleanEmail,
-          role,
-          createdAt: Date.now(),
-        };
+        if (!data.user) {
+          setError('Não foi possível criar a conta. Tente novamente.');
+          setLoading(false);
+          return;
+        }
 
-        // Garante que o role seja atualizado caso necessário
-        if (!found) {
-          saveRegisteredUser(user);
-        } else if (found.role !== role) {
-          found.role = role;
-          saveRegisteredUser(found);
+        // Aguarda um pouco para o trigger criar o profile
+        await new Promise((r) => setTimeout(r, 600));
+
+        let profile = await getProfile(data.user.id);
+
+        // Fallback caso o trigger ainda não tenha rodado
+        if (!profile) {
+          profile = {
+            id: data.user.id,
+            name: cleanName,
+            email: cleanEmail,
+            role: 'user',
+            createdAt: Date.now(),
+          };
         }
 
         setLoading(false);
-        onLoginSuccess(found || user, false);
-      }
-    }, 400);
-  }
+        onLoginSuccess(profile, true);
+      } else {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
 
-  function handleQuickAdminLogin() {
-    setEmail('admin@kast.com');
-    setPassword('admin123');
-    setName('Administrador KAST');
-    setMode('login');
+        if (signInError) {
+          setError(signInError.message === 'Invalid login credentials'
+            ? 'E-mail ou senha incorretos.'
+            : signInError.message);
+          setLoading(false);
+          return;
+        }
+
+        if (!data.user) {
+          setError('Não foi possível entrar. Tente novamente.');
+          setLoading(false);
+          return;
+        }
+
+        const profile = await getProfile(data.user.id);
+
+        if (!profile) {
+          setError('Perfil não encontrado. Contate o suporte.');
+          setLoading(false);
+          return;
+        }
+
+        setLoading(false);
+        onLoginSuccess(profile, false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Erro inesperado. Tente novamente.');
+      setLoading(false);
+    }
   }
 
   return (
     <div className="min-h-screen bg-[#070a0f] text-white flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden">
-      {/* Luz de fundo decorativa */}
       <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-[450px] w-[600px] rounded-full bg-emerald-500/10 blur-[130px]" />
       <div className="pointer-events-none absolute -bottom-40 right-1/4 h-[350px] w-[500px] rounded-full bg-blue-500/10 blur-[120px]" />
 
       <div className="relative z-10 w-full max-w-md">
-        {/* Logo e cabeçalho */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-white/[0.04] border border-white/10 mb-4 shadow-lg shadow-black/40">
             <img
@@ -163,9 +155,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           </p>
         </div>
 
-        {/* Card do formulário */}
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 backdrop-blur-xl shadow-2xl shadow-black/60">
-          {/* Seletor de abas Cadastro / Entrar */}
           <div className="flex rounded-xl bg-white/5 p-1 mb-6 border border-white/5">
             <button
               type="button"
@@ -282,10 +272,9 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             </button>
           </form>
 
-          {/* Destaque de segurança */}
           <div className="mt-6 border-t border-white/10 pt-4 flex items-center justify-center gap-2 text-xs text-white/40">
             <ShieldCheck size={14} className="text-emerald-400" />
-            <span>Dados salvos com segurança local</span>
+            <span>Autenticação segura via Supabase</span>
           </div>
         </div>
       </div>
