@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Overview from './pages/Overview';
@@ -9,39 +9,22 @@ import Admin from './pages/Admin';
 import AuthPage, { type UserProfile } from './pages/AuthPage';
 import type { Currency } from './utils';
 import { generateTxHash, type Holding, type Transaction } from './data';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import {
+  getProfile,
+  updateProfile,
+  fetchHoldings,
+  fetchTransactions,
+  applyHoldingDelta,
+  insertTransaction,
+  deleteTransaction as dbDeleteTransaction,
+} from './lib/database';
 
 export type Page = 'overview' | 'wallet' | 'markets' | 'settings' | 'admin';
 
-const AUTH_USER_KEY = 'cryptodesk-active-user-v1';
-
-function getUserStorageKey(userId: string) {
-  return `cryptodesk-data-user-${userId}`;
-}
-
-function loadActiveUser(): UserProfile | null {
-  try {
-    const raw = localStorage.getItem(AUTH_USER_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function loadUserData(userId: string): { holdings: Holding[]; transactions: Transaction[] } | null {
-  try {
-    const raw = localStorage.getItem(getUserStorageKey(userId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.holdings) && Array.isArray(parsed.transactions)) return parsed;
-  } catch {
-    // fallback
-  }
-  return null;
-}
-
 export default function App() {
-  const [user, setUser] = useState<UserProfile | null>(() => loadActiveUser());
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
   const [page, setPage] = useState<Page>('overview');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [marketsQuery, setMarketsQuery] = useState('');
@@ -51,75 +34,116 @@ export default function App() {
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(false);
 
-  const [holdings, setHoldings] = useState<Holding[]>(() => {
-    if (!user) return [];
-    const saved = loadUserData(user.id);
-    return saved?.holdings ?? [];
-  });
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    if (!user) return [];
-    const saved = loadUserData(user.id);
-    return saved?.transactions ?? [];
-  });
-
-  // Salva dados da conta ativa
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-      localStorage.setItem(getUserStorageKey(user.id), JSON.stringify({ holdings, transactions }));
+  const loadUserData = useCallback(async (userId: string) => {
+    setDataLoading(true);
+    try {
+      const [h, t] = await Promise.all([
+        fetchHoldings(userId),
+        fetchTransactions(userId),
+      ]);
+      setHoldings(h);
+      setTransactions(t);
+    } finally {
+      setDataLoading(false);
     }
-  }, [user, holdings, transactions]);
+  }, []);
 
-  function handleLoginSuccess(authenticatedUser: UserProfile, isNewUser?: boolean) {
+  // Restaura sessão do Supabase ao carregar
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setLoadingSession(false);
+      return;
+    }
+
+    let mounted = true;
+
+    async function init() {
+      const { data: { session } } = await supabase!.auth.getSession();
+
+      if (session?.user && mounted) {
+        const profile = await getProfile(session.user.id);
+        if (profile && mounted) {
+          setUser(profile);
+          await loadUserData(profile.id);
+        }
+      }
+
+      if (mounted) setLoadingSession(false);
+    }
+
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setHoldings([]);
+          setTransactions([]);
+          setPage('overview');
+          return;
+        }
+
+        if (session?.user) {
+          const profile = await getProfile(session.user.id);
+          if (profile) {
+            setUser(profile);
+            await loadUserData(profile.id);
+          }
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadUserData]);
+
+  async function handleLoginSuccess(authenticatedUser: UserProfile, isNewUser?: boolean) {
     setUser(authenticatedUser);
     if (isNewUser) {
-      // Nova conta inicia com saldos zerados e sem histórico
       setHoldings([]);
       setTransactions([]);
     } else {
-      const saved = loadUserData(authenticatedUser.id);
-      setHoldings(saved?.holdings ?? []);
-      setTransactions(saved?.transactions ?? []);
+      await loadUserData(authenticatedUser.id);
     }
     setPage('overview');
   }
 
-  function handleLogout() {
-    localStorage.removeItem(AUTH_USER_KEY);
+  async function handleLogout() {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     setUser(null);
+    setHoldings([]);
+    setTransactions([]);
     setPage('overview');
   }
 
-  function handleRefreshActiveUser() {
+  async function handleRefreshActiveUser() {
     if (user) {
-      const saved = loadUserData(user.id);
-      if (saved) {
-        setHoldings(saved.holdings);
-        setTransactions(saved.transactions);
-      }
+      await loadUserData(user.id);
     }
   }
 
-  function handleUpdateUser(updated: Partial<UserProfile>) {
+  async function handleUpdateUser(updated: Partial<UserProfile>) {
     if (!user) return;
-    const updatedUser = { ...user, ...updated };
-    setUser(updatedUser);
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
-  }
 
-  function addTransaction(tx: Transaction) {
-    setTransactions(prev => [tx, ...prev]);
-  }
-
-  function applyDelta(assetId: string, delta: number) {
-    setHoldings(prev => {
-      const exists = prev.some(h => h.id === assetId);
-      if (exists) {
-        return prev.map(h => h.id === assetId ? { ...h, amount: Math.max(0, h.amount + delta) } : h);
-      }
-      return delta > 0 ? [...prev, { id: assetId, amount: delta }] : prev;
+    const result = await updateProfile(user.id, {
+      name: updated.name,
+      email: updated.email,
     });
+
+    if (result) {
+      setUser(result);
+    } else {
+      // fallback local
+      setUser({ ...user, ...updated });
+    }
   }
 
   function handleSetHideBalanceDefault(value: boolean) {
@@ -138,10 +162,17 @@ export default function App() {
     setMobileOpen(false);
   }
 
-  function handleBuyConfirm(assetId: string, cryptoAmount: number, fiatAmount: number, paymentMethod: string) {
-    applyDelta(assetId, cryptoAmount);
-    addTransaction({
-      id: `t${Date.now()}`,
+  async function handleBuyConfirm(
+    assetId: string,
+    cryptoAmount: number,
+    fiatAmount: number,
+    paymentMethod: string
+  ) {
+    if (!user) return;
+
+    await applyHoldingDelta(user.id, assetId, cryptoAmount);
+
+    const tx = await insertTransaction(user.id, {
       type: 'buy',
       assetId,
       amount: cryptoAmount,
@@ -151,12 +182,29 @@ export default function App() {
       status: 'confirmed',
       timestamp: Date.now(),
     });
+
+    if (tx) {
+      setTransactions(prev => [tx, ...prev]);
+    }
+
+    // Atualiza holdings localmente também
+    setHoldings(prev => {
+      const exists = prev.some(h => h.id === assetId);
+      if (exists) {
+        return prev.map(h =>
+          h.id === assetId ? { ...h, amount: Math.max(0, h.amount + cryptoAmount) } : h
+        );
+      }
+      return [...prev, { id: assetId, amount: cryptoAmount }];
+    });
   }
 
-  function handleSendConfirm(assetId: string, amount: number, address: string) {
-    applyDelta(assetId, -amount);
-    addTransaction({
-      id: `t${Date.now()}`,
+  async function handleSendConfirm(assetId: string, amount: number, address: string) {
+    if (!user) return;
+
+    await applyHoldingDelta(user.id, assetId, -amount);
+
+    const tx = await insertTransaction(user.id, {
       type: 'send',
       assetId,
       amount,
@@ -165,13 +213,30 @@ export default function App() {
       status: 'confirmed',
       timestamp: Date.now(),
     });
+
+    if (tx) {
+      setTransactions(prev => [tx, ...prev]);
+    }
+
+    setHoldings(prev =>
+      prev
+        .map(h => (h.id === assetId ? { ...h, amount: Math.max(0, h.amount - amount) } : h))
+        .filter(h => h.amount > 0)
+    );
   }
 
-  function handleSwapConfirm(fromId: string, fromAmount: number, toId: string, toAmount: number) {
-    applyDelta(fromId, -fromAmount);
-    applyDelta(toId, toAmount);
-    addTransaction({
-      id: `t${Date.now()}`,
+  async function handleSwapConfirm(
+    fromId: string,
+    fromAmount: number,
+    toId: string,
+    toAmount: number
+  ) {
+    if (!user) return;
+
+    await applyHoldingDelta(user.id, fromId, -fromAmount);
+    await applyHoldingDelta(user.id, toId, toAmount);
+
+    const tx = await insertTransaction(user.id, {
       type: 'swap',
       assetId: fromId,
       amount: fromAmount,
@@ -181,21 +246,67 @@ export default function App() {
       status: 'confirmed',
       timestamp: Date.now(),
     });
+
+    if (tx) {
+      setTransactions(prev => [tx, ...prev]);
+    }
+
+    setHoldings(prev => {
+      let next = prev.map(h => {
+        if (h.id === fromId) return { ...h, amount: Math.max(0, h.amount - fromAmount) };
+        if (h.id === toId) return { ...h, amount: h.amount + toAmount };
+        return h;
+      });
+
+      if (!next.some(h => h.id === toId)) {
+        next = [...next, { id: toId, amount: toAmount }];
+      }
+
+      return next.filter(h => h.amount > 0);
+    });
   }
 
-  function handleAddManualTransaction(tx: Transaction, adjustBalance: boolean) {
+  async function handleAddManualTransaction(tx: Transaction, adjustBalance: boolean) {
+    if (!user) return;
+
     if (adjustBalance) {
       const delta = tx.type === 'receive' || tx.type === 'buy' ? tx.amount : -tx.amount;
-      applyDelta(tx.assetId, delta);
+      await applyHoldingDelta(user.id, tx.assetId, delta);
+
+      setHoldings(prev => {
+        const exists = prev.some(h => h.id === tx.assetId);
+        if (exists) {
+          return prev
+            .map(h =>
+              h.id === tx.assetId ? { ...h, amount: Math.max(0, h.amount + delta) } : h
+            )
+            .filter(h => h.amount > 0);
+        }
+        return delta > 0 ? [...prev, { id: tx.assetId, amount: delta }] : prev;
+      });
     }
-    setTransactions(prev => [tx, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+
+    const inserted = await insertTransaction(user.id, tx);
+    if (inserted) {
+      setTransactions(prev => [inserted, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+    }
   }
 
-  function handleDeleteTransaction(id: string) {
-    setTransactions(prev => prev.filter(t => t.id !== id));
+  async function handleDeleteTransaction(id: string) {
+    const ok = await dbDeleteTransaction(id);
+    if (ok) {
+      setTransactions(prev => prev.filter(t => t.id !== id));
+    }
   }
 
-  // Se o usuário não estiver logado/cadastrado, exibe a página de autenticação
+  if (loadingSession) {
+    return (
+      <div className="min-h-screen bg-[#070a0f] text-white flex items-center justify-center">
+        <div className="text-sm text-white/50">Carregando sessão...</div>
+      </div>
+    );
+  }
+
   if (!user) {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
@@ -223,6 +334,10 @@ export default function App() {
         />
 
         <main className="min-w-0 flex-1 p-4 md:p-8">
+          {dataLoading && (
+            <div className="mb-4 text-xs text-white/40">Atualizando dados...</div>
+          )}
+
           {page === 'overview' && (
             <Overview
               hideBalance={hideBalance}
@@ -274,4 +389,3 @@ export default function App() {
     </div>
   );
 }
-
