@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  role: 'admin' | 'user';
   createdAt: number;
 }
 
@@ -26,9 +27,27 @@ export function getRegisteredUsers(): UserProfile[] {
 }
 
 export function saveRegisteredUser(user: UserProfile) {
-  const users = getRegisteredUsers().filter(u => u.email.toLowerCase() !== user.email.toLowerCase());
+  const users = getRegisteredUsers().filter(u => u.id !== user.id && u.email.toLowerCase() !== user.email.toLowerCase());
   users.push(user);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+export function deleteRegisteredUser(userId: string) {
+  const users = getRegisteredUsers().filter(u => u.id !== userId);
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function determineRole(email: string): 'admin' | 'user' {
+  const lower = email.trim().toLowerCase();
+  if (
+    lower === 'admin@kast.com' ||
+    lower.startsWith('admin@') ||
+    lower === 'c.alvesdecampos@gmail.com' ||
+    lower.includes('admin')
+  ) {
+    return 'admin';
+  }
+  return 'user';
 }
 
 export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
@@ -60,6 +79,8 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setLoading(true);
 
     setTimeout(() => {
+      const role = determineRole(cleanEmail);
+
       if (mode === 'register') {
         if (!cleanName) {
           setError('Por favor, informe seu nome completo.');
@@ -76,6 +97,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           id: `u_${Date.now()}`,
           name: cleanName,
           email: cleanEmail,
+          role,
           createdAt: Date.now(),
         };
 
@@ -90,17 +112,29 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           id: `u_${Date.now()}`,
           name: cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
           email: cleanEmail,
+          role,
           createdAt: Date.now(),
         };
 
+        // Garante que o role seja atualizado caso necessário
         if (!found) {
           saveRegisteredUser(user);
+        } else if (found.role !== role) {
+          found.role = role;
+          saveRegisteredUser(found);
         }
 
         setLoading(false);
-        onLoginSuccess(user, false);
+        onLoginSuccess(found || user, false);
       }
     }, 400);
+  }
+
+  function handleQuickAdminLogin() {
+    setEmail('admin@kast.com');
+    setPassword('admin123');
+    setName('Administrador KAST');
+    setMode('login');
   }
 
   return (
@@ -248,10 +282,22 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             </button>
           </form>
 
+          {/* Atalho de acesso Admin para testes */}
+          <div className="mt-5 border-t border-white/10 pt-4 text-center">
+            <button
+              type="button"
+              onClick={handleQuickAdminLogin}
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-400/80 hover:text-emerald-300 transition-colors"
+            >
+              <ShieldAlert size={14} />
+              <span>Acesso Rápido de Administrador (admin@kast.com)</span>
+            </button>
+          </div>
+
           {/* Destaque de segurança */}
-          <div className="mt-6 border-t border-white/10 pt-4 flex items-center justify-center gap-2 text-xs text-white/40">
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-white/40">
             <ShieldCheck size={14} className="text-emerald-400" />
-            <span>Dados salvos localmente no seu navegador</span>
+            <span>Dados salvos com segurança local</span>
           </div>
         </div>
       </div>

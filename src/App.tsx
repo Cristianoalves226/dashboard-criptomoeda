@@ -5,11 +5,12 @@ import Overview from './pages/Overview';
 import Wallet from './pages/Wallet';
 import Markets from './pages/Markets';
 import Settings from './pages/Settings';
+import Admin from './pages/Admin';
 import AuthPage, { type UserProfile } from './pages/AuthPage';
 import type { Currency } from './utils';
 import { generateTxHash, type Holding, type Transaction } from './data';
 
-export type Page = 'overview' | 'wallet' | 'markets' | 'settings';
+export type Page = 'overview' | 'wallet' | 'markets' | 'settings' | 'admin';
 
 const AUTH_USER_KEY = 'cryptodesk-active-user-v1';
 
@@ -88,6 +89,16 @@ export default function App() {
     localStorage.removeItem(AUTH_USER_KEY);
     setUser(null);
     setPage('overview');
+  }
+
+  function handleRefreshActiveUser() {
+    if (user) {
+      const saved = loadUserData(user.id);
+      if (saved) {
+        setHoldings(saved.holdings);
+        setTransactions(saved.transactions);
+      }
+    }
   }
 
   function handleUpdateUser(updated: Partial<UserProfile>) {
@@ -189,6 +200,8 @@ export default function App() {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  const isAdmin = user.role === 'admin';
+
   return (
     <div className="min-h-screen bg-[#070a0f] text-white font-sans flex flex-col">
       <Header
@@ -201,7 +214,13 @@ export default function App() {
       />
 
       <div className="mx-auto flex max-w-[1500px] flex-1 w-full">
-        <Sidebar page={page} setPage={changePage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+        <Sidebar
+          page={page}
+          setPage={changePage}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          isAdmin={isAdmin}
+        />
 
         <main className="min-w-0 flex-1 p-4 md:p-8">
           {page === 'overview' && (
@@ -220,6 +239,7 @@ export default function App() {
               currency={currency}
               holdings={holdings}
               transactions={transactions}
+              isAdmin={isAdmin}
               onBuyConfirm={handleBuyConfirm}
               onSendConfirm={handleSendConfirm}
               onSwapConfirm={handleSwapConfirm}
@@ -245,6 +265,9 @@ export default function App() {
               user={user}
               onUpdateUser={handleUpdateUser}
             />
+          )}
+          {page === 'admin' && isAdmin && (
+            <Admin currency={currency} onRefreshActiveUser={handleRefreshActiveUser} />
           )}
         </main>
       </div>

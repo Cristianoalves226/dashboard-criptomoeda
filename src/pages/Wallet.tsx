@@ -16,6 +16,7 @@ interface WalletProps {
   currency: Currency;
   holdings: Holding[];
   transactions: Transaction[];
+  isAdmin?: boolean;
   onBuyConfirm: (assetId: string, cryptoAmount: number, fiatAmount: number, paymentMethod: string) => void;
   onSendConfirm: (assetId: string, amount: number, address: string) => void;
   onSwapConfirm: (fromId: string, fromAmount: number, toId: string, toAmount: number) => void;
@@ -31,6 +32,7 @@ const allocationColors = ['bg-white', 'bg-white/70', 'bg-white/45', 'bg-white/25
 export default function Wallet({
   hideBalance, setHideBalance, currency,
   holdings, transactions,
+  isAdmin,
   onBuyConfirm, onSendConfirm, onSwapConfirm,
   onAddManualTransaction, onDeleteTransaction,
 }: WalletProps) {
@@ -184,12 +186,14 @@ export default function Wallet({
         <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Histórico de transações</h2>
-            <button
-              onClick={() => setModal('add')}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:border-white/20 hover:text-white"
-            >
-              <PlusCircle size={13} /> Nova transação (demo)
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setModal('add')}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:border-white/20 hover:text-white"
+              >
+                <PlusCircle size={13} /> Nova transação (Admin)
+              </button>
+            )}
           </div>
           <div className="mt-4 space-y-2.5">
             {transactions.length === 0 ? (
