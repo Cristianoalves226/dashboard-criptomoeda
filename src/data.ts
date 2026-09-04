@@ -53,11 +53,13 @@ export const swapFeeRate = 0.003; // 0,3%
 
 export interface Transaction {
   id: string;
-  type: 'receive' | 'send' | 'swap';
+  type: 'receive' | 'send' | 'swap' | 'buy';
   assetId: string;
   amount: number;
   toAssetId?: string;
   toAmount?: number;
+  fiatAmount?: number;
+  paymentMethod?: string;
   counterparty?: string;
   hash: string;
   status: 'pending' | 'confirmed' | 'failed';

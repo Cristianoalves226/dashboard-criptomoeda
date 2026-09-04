@@ -127,6 +127,21 @@ export default function App() {
     setMobileOpen(false);
   }
 
+  function handleBuyConfirm(assetId: string, cryptoAmount: number, fiatAmount: number, paymentMethod: string) {
+    applyDelta(assetId, cryptoAmount);
+    addTransaction({
+      id: `t${Date.now()}`,
+      type: 'buy',
+      assetId,
+      amount: cryptoAmount,
+      fiatAmount,
+      paymentMethod,
+      hash: generateTxHash(),
+      status: 'confirmed',
+      timestamp: Date.now(),
+    });
+  }
+
   function handleSendConfirm(assetId: string, amount: number, address: string) {
     applyDelta(assetId, -amount);
     addTransaction({
@@ -159,7 +174,7 @@ export default function App() {
 
   function handleAddManualTransaction(tx: Transaction, adjustBalance: boolean) {
     if (adjustBalance) {
-      const delta = tx.type === 'receive' ? tx.amount : -tx.amount;
+      const delta = tx.type === 'receive' || tx.type === 'buy' ? tx.amount : -tx.amount;
       applyDelta(tx.assetId, delta);
     }
     setTransactions(prev => [tx, ...prev].sort((a, b) => b.timestamp - a.timestamp));
@@ -205,6 +220,7 @@ export default function App() {
               currency={currency}
               holdings={holdings}
               transactions={transactions}
+              onBuyConfirm={handleBuyConfirm}
               onSendConfirm={handleSendConfirm}
               onSwapConfirm={handleSwapConfirm}
               onAddManualTransaction={handleAddManualTransaction}

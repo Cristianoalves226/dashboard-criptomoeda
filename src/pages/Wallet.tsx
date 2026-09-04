@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Eye, EyeOff, PlusCircle } from 'lucide-react';
+import { Eye, EyeOff, PlusCircle, ShoppingBag } from 'lucide-react';
 import { getMarket, type Holding, type Transaction } from '../data';
 import { money, type Currency } from '../utils';
 import QuickActions from '../components/QuickActions';
 import ReceiveModal from '../components/ReceiveModal';
 import SendModal from '../components/SendModal';
 import SwapModal from '../components/SwapModal';
+import BuyModal from '../components/BuyModal';
 import TransactionRow from '../components/TransactionRow';
 import AddTransactionModal from '../components/AddTransactionModal';
 
@@ -15,6 +16,7 @@ interface WalletProps {
   currency: Currency;
   holdings: Holding[];
   transactions: Transaction[];
+  onBuyConfirm: (assetId: string, cryptoAmount: number, fiatAmount: number, paymentMethod: string) => void;
   onSendConfirm: (assetId: string, amount: number, address: string) => void;
   onSwapConfirm: (fromId: string, fromAmount: number, toId: string, toAmount: number) => void;
   onAddManualTransaction: (tx: Transaction, adjustBalance: boolean) => void;
@@ -22,14 +24,14 @@ interface WalletProps {
 }
 
 type Tab = 'assets' | 'activity';
-type ActiveModal = 'receive' | 'send' | 'swap' | 'add' | null;
+type ActiveModal = 'buy' | 'receive' | 'send' | 'swap' | 'add' | null;
 
 const allocationColors = ['bg-white', 'bg-white/70', 'bg-white/45', 'bg-white/25', 'bg-white/15'];
 
 export default function Wallet({
   hideBalance, setHideBalance, currency,
   holdings, transactions,
-  onSendConfirm, onSwapConfirm,
+  onBuyConfirm, onSendConfirm, onSwapConfirm,
   onAddManualTransaction, onDeleteTransaction,
 }: WalletProps) {
   const [tab, setTab] = useState<Tab>('assets');
@@ -65,6 +67,7 @@ export default function Wallet({
 
       <div className="mt-5">
         <QuickActions
+          onBuy={() => setModal('buy')}
           onReceive={() => setModal('receive')}
           onSend={() => setModal('send')}
           onSwap={() => setModal('swap')}
@@ -73,10 +76,13 @@ export default function Wallet({
       </div>
 
       <div className="mt-6 flex gap-1 rounded-lg bg-white/5 p-1 w-fit">
-        {([['assets', 'Ativos'], ['activity', 'Transações']] as [Tab, string][]).map(([key, label]) => (
+        {[
+          { key: 'assets', label: 'Ativos' },
+          { key: 'activity', label: `Histórico (${transactions.length})` },
+        ].map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => setTab(key as Tab)}
             className={`rounded-md px-4 py-1.5 text-xs ${tab === key ? 'bg-white text-black' : 'text-white/45'}`}
           >
             {label}
@@ -89,7 +95,16 @@ export default function Wallet({
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
             <h2 className="font-semibold">Meus ativos</h2>
             {sorted.length === 0 ? (
-              <p className="mt-4 text-sm text-white/35">Nenhum ativo na carteira ainda.</p>
+              <div className="py-10 text-center text-sm text-white/40">
+                <p>Nenhum ativo na carteira ainda.</p>
+                <button
+                  onClick={() => setModal('buy')}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-white/90"
+                >
+                  <ShoppingBag size={14} />
+                  Comprar Criptomoeda
+                </button>
+              </div>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
@@ -129,26 +144,37 @@ export default function Wallet({
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
-            <h2 className="font-semibold">Alocação</h2>
+            <h2 className="font-semibold">Distribuição</h2>
             {sorted.length === 0 ? (
-              <p className="mt-4 text-sm text-white/35">Sem dados para exibir.</p>
+              <p className="mt-4 text-xs text-white/35">Sem distribuição para exibir.</p>
             ) : (
               <>
-                <div className="mt-5 flex h-3 w-full overflow-hidden rounded-full bg-white/5">
-                  {sorted.map(({ id, value }, i) => (
-                    <div key={id} className={allocationColors[i % allocationColors.length]} style={{ width: `${(value / total) * 100}%` }} />
-                  ))}
+                <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-white/5">
+                  {sorted.map(({ id, value }, index) => {
+                    const pct = total > 0 ? (value / total) * 100 : 0;
+                    return (
+                      <div
+                        key={id}
+                        style={{ width: `${pct}%` }}
+                        className={`h-full ${allocationColors[index % allocationColors.length]}`}
+                        title={`${pct.toFixed(1)}%`}
+                      />
+                    );
+                  })}
                 </div>
-                <div className="mt-5 space-y-3">
-                  {sorted.map(({ id, market, value }, i) => (
-                    <div key={id} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 rounded-full ${allocationColors[i % allocationColors.length]}`} />
-                        <span className="text-white/75">{market.name}</span>
+                <div className="mt-5 space-y-2">
+                  {sorted.map(({ id, market, value }, index) => {
+                    const pct = total > 0 ? (value / total) * 100 : 0;
+                    return (
+                      <div key={id} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className={`h-2.5 w-2.5 rounded-full ${allocationColors[index % allocationColors.length]}`} />
+                          <span className="text-white/70">{market.name}</span>
+                        </div>
+                        <span className="font-medium">{pct.toFixed(1)}%</span>
                       </div>
-                      <span className="text-white/40">{((value / total) * 100).toFixed(1)}%</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -175,6 +201,9 @@ export default function Wallet({
         </section>
       )}
 
+      {modal === 'buy' && (
+        <BuyModal onClose={() => setModal(null)} onConfirm={onBuyConfirm} currency={currency} />
+      )}
       {modal === 'receive' && <ReceiveModal onClose={() => setModal(null)} />}
       {modal === 'send' && (
         <SendModal onClose={() => setModal(null)} holdings={owned} onConfirm={onSendConfirm} currency={currency} />

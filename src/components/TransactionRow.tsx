@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, Check, Clock, Copy, Repeat, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Check, Clock, Copy, Repeat, ShoppingBag, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { getMarket, type Transaction } from '../data';
 import { formatRelativeTime, truncateMiddle } from '../utils';
@@ -20,22 +20,44 @@ export default function TransactionRow({ tx, onDelete }: TransactionRowProps) {
   const toAsset = tx.toAssetId ? getMarket(tx.toAssetId) : null;
   const status = statusMeta[tx.status];
 
-  const icon = tx.type === 'receive' ? <ArrowDownLeft size={16} /> : tx.type === 'send' ? <ArrowUpRight size={16} /> : <Repeat size={15} />;
-  const iconClass = tx.type === 'receive' ? 'bg-emerald-400/10 text-emerald-300' : tx.type === 'send' ? 'bg-white/10 text-white/70' : 'bg-sky-400/10 text-sky-300';
+  const icon = tx.type === 'buy'
+    ? <ShoppingBag size={16} />
+    : tx.type === 'receive'
+    ? <ArrowDownLeft size={16} />
+    : tx.type === 'send'
+    ? <ArrowUpRight size={16} />
+    : <Repeat size={15} />;
 
-  const title = tx.type === 'receive'
+  const iconClass = tx.type === 'buy'
+    ? 'bg-emerald-500/20 text-emerald-300'
+    : tx.type === 'receive'
+    ? 'bg-emerald-400/10 text-emerald-300'
+    : tx.type === 'send'
+    ? 'bg-white/10 text-white/70'
+    : 'bg-sky-400/10 text-sky-300';
+
+  const title = tx.type === 'buy'
+    ? `Compra de ${asset.symbol}`
+    : tx.type === 'receive'
     ? `Recebido ${asset.symbol}`
     : tx.type === 'send'
     ? `Enviado ${asset.symbol}`
     : `Swap ${asset.symbol} → ${toAsset?.symbol}`;
 
-  const subtitle = tx.type === 'swap'
+  const subtitle = tx.type === 'buy'
+    ? `${tx.paymentMethod ? `${tx.paymentMethod} • ` : ''}${asset.name}`
+    : tx.type === 'swap'
     ? `${tx.amount} ${asset.symbol} por ${tx.toAmount?.toFixed(6)} ${toAsset?.symbol}`
     : tx.counterparty
     ? (tx.type === 'receive' ? `De ${truncateMiddle(tx.counterparty)}` : `Para ${truncateMiddle(tx.counterparty)}`)
     : '';
 
-  const amountLabel = tx.type === 'send' ? `-${tx.amount} ${asset.symbol}` : tx.type === 'receive' ? `+${tx.amount} ${asset.symbol}` : `+${tx.toAmount?.toFixed(4)} ${toAsset?.symbol}`;
+  const amountLabel = tx.type === 'send'
+    ? `-${tx.amount} ${asset.symbol}`
+    : tx.type === 'swap'
+    ? `+${tx.toAmount?.toFixed(4)} ${toAsset?.symbol}`
+    : `+${tx.amount} ${asset.symbol}`;
+
   const amountClass = tx.type === 'send' ? 'text-white/80' : 'text-emerald-300';
 
   async function copyHash() {
