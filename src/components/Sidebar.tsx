@@ -33,10 +33,6 @@ export default function Sidebar({ page, setPage, mobileOpen, setMobileOpen }: Si
           </button>
         ))}
       </nav>
-      <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <p className="text-xs text-white/40">MODO DEMONSTRAÇÃO</p>
-        <p className="mt-2 text-sm text-white/70">Todos os valores desta plataforma são fictícios.</p>
-      </div>
     </aside>
   );
 }
