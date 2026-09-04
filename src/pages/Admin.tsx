@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Users,
   ShieldCheck,
@@ -7,16 +7,22 @@ import {
   TrendingUp,
   Search,
   Wallet,
-  ArrowDownLeft,
-  ArrowUpRight,
   Clock,
-  Sparkles,
   Check,
   Trash2,
   RefreshCw,
 } from 'lucide-react';
-import { getRegisteredUsers, deleteRegisteredUser, type UserProfile } from './AuthPage';
-import { markets, getMarket, generateTxHash, type Holding, type Transaction } from '../data';
+import type { UserProfile } from '../lib/database';
+import {
+  listAllProfiles,
+  deleteProfile,
+  fetchHoldings,
+  fetchTransactions,
+  applyHoldingDelta,
+  insertTransaction,
+  resetUserWallet,
+} from '../lib/database';
+import { markets, getMarket, generateTxHash, type Holding } from '../data';
 import { money, formatRelativeTime, type Currency } from '../utils';
 import Modal from '../components/Modal';
 
@@ -25,66 +31,77 @@ interface AdminProps {
   onRefreshActiveUser?: () => void;
 }
 
-function getUserStorageKey(userId: string) {
-  return `cryptodesk-data-user-${userId}`;
-}
-
-function loadUserData(userId: string): { holdings: Holding[]; transactions: Transaction[] } {
-  try {
-    const raw = localStorage.getItem(getUserStorageKey(userId));
-    if (!raw) return { holdings: [], transactions: [] };
-    const parsed = JSON.parse(raw);
-    return {
-      holdings: Array.isArray(parsed.holdings) ? parsed.holdings : [],
-      transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
-    };
-  } catch {
-    return { holdings: [], transactions: [] };
-  }
-}
-
-function saveUserData(userId: string, data: { holdings: Holding[]; transactions: Transaction[] }) {
-  localStorage.setItem(getUserStorageKey(userId), JSON.stringify(data));
-}
-
 export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
-  const [users, setUsers] = useState<UserProfile[]>(() => getRegisteredUsers());
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedHoldings, setSelectedHoldings] = useState<Holding[]>([]);
+  const [selectedTxCount, setSelectedTxCount] = useState(0);
 
-  // Estados do modal de ajuste de saldo
+  // Stats cache: userId -> { totalValue, txCount, holdings }
+  const [userStats, setUserStats] = useState<
+    Record<string, { totalValue: number; txCount: number; holdings: Holding[] }>
+  >({});
+
   const [selectedAssetId, setSelectedAssetId] = useState('usdt');
   const [operationType, setOperationType] = useState<'credit' | 'debit'>('credit');
   const [amountInput, setAmountInput] = useState('1000');
   const [reason, setReason] = useState('Depósito Aprovado');
   const [successMsg, setSuccessMsg] = useState('');
+  const [applying, setApplying] = useState(false);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const profiles = await listAllProfiles();
+      setUsers(profiles);
+
+      // Carrega stats de cada usuário em paralelo (limitado)
+      const stats: Record<string, { totalValue: number; txCount: number; holdings: Holding[] }> = {};
+
+      await Promise.all(
+        profiles.map(async (u) => {
+          const [holdings, txs] = await Promise.all([
+            fetchHoldings(u.id),
+            fetchTransactions(u.id),
+          ]);
+          const totalValue = holdings.reduce((sum, h) => {
+            try {
+              return sum + h.amount * getMarket(h.id).price;
+            } catch {
+              return sum;
+            }
+          }, 0);
+          stats[u.id] = { totalValue, txCount: txs.length, holdings };
+        })
+      );
+
+      setUserStats(stats);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(
-      u =>
+      (u) =>
         u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [users, searchQuery]);
 
-  // Carrega dados do usuário selecionado no modal
-  const selectedUserData = useMemo(() => {
-    if (!selectedUser) return { holdings: [], transactions: [] };
-    return loadUserData(selectedUser.id);
-  }, [selectedUser, successMsg]);
-
-  // Calcula patrimônio total de todos os usuários gerenciados
   const platformStats = useMemo(() => {
     let totalValue = 0;
     let totalTransactions = 0;
 
-    users.forEach(u => {
-      const data = loadUserData(u.id);
-      totalTransactions += data.transactions.length;
-      data.holdings.forEach(h => {
-        const m = getMarket(h.id);
-        totalValue += h.amount * m.price;
-      });
+    Object.values(userStats).forEach((s) => {
+      totalValue += s.totalValue;
+      totalTransactions += s.txCount;
     });
 
     return {
@@ -92,77 +109,104 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
       totalValue,
       totalTransactions,
     };
-  }, [users, successMsg]);
+  }, [users, userStats]);
 
-  function handleOpenManager(user: UserProfile) {
+  async function handleOpenManager(user: UserProfile) {
     setSelectedUser(user);
     setSuccessMsg('');
     setAmountInput('1000');
     setReason('Depósito Aprovado');
+
+    const holdings = await fetchHoldings(user.id);
+    const txs = await fetchTransactions(user.id);
+    setSelectedHoldings(holdings);
+    setSelectedTxCount(txs.length);
   }
 
-  function handleApplyBalanceAdjustment(e: React.FormEvent) {
+  async function handleApplyBalanceAdjustment(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedUser) return;
+    if (!selectedUser || applying) return;
 
     const numAmount = parseFloat(amountInput.replace(',', '.')) || 0;
     if (numAmount <= 0) return;
 
-    const currentData = loadUserData(selectedUser.id);
-    const delta = operationType === 'credit' ? numAmount : -numAmount;
+    setApplying(true);
+    try {
+      const delta = operationType === 'credit' ? numAmount : -numAmount;
 
-    // Atualiza saldo do ativo
-    const exists = currentData.holdings.some(h => h.id === selectedAssetId);
-    let updatedHoldings: Holding[];
+      await applyHoldingDelta(selectedUser.id, selectedAssetId, delta);
 
-    if (exists) {
-      updatedHoldings = currentData.holdings.map(h =>
-        h.id === selectedAssetId ? { ...h, amount: Math.max(0, h.amount + delta) } : h
+      await insertTransaction(selectedUser.id, {
+        type: operationType === 'credit' ? 'receive' : 'send',
+        assetId: selectedAssetId,
+        amount: numAmount,
+        counterparty: `Admin • ${reason}`,
+        hash: generateTxHash(),
+        status: 'confirmed',
+        timestamp: Date.now(),
+      });
+
+      // Atualiza holdings do modal
+      const updatedHoldings = await fetchHoldings(selectedUser.id);
+      setSelectedHoldings(updatedHoldings);
+
+      // Atualiza stats
+      setUserStats((prev) => {
+        const current = prev[selectedUser.id] || { totalValue: 0, txCount: 0, holdings: [] };
+        const totalValue = updatedHoldings.reduce((sum, h) => {
+          try {
+            return sum + h.amount * getMarket(h.id).price;
+          } catch {
+            return sum;
+          }
+        }, 0);
+        return {
+          ...prev,
+          [selectedUser.id]: {
+            totalValue,
+            txCount: current.txCount + 1,
+            holdings: updatedHoldings,
+          },
+        };
+      });
+
+      setSuccessMsg(
+        `Saldo de ${numAmount} ${getMarket(selectedAssetId).symbol} ${
+          operationType === 'credit' ? 'creditado' : 'debitado'
+        } com sucesso!`
       );
-    } else {
-      updatedHoldings = delta > 0 ? [...currentData.holdings, { id: selectedAssetId, amount: delta }] : currentData.holdings;
-    }
 
-    // Cria registro de transação com o motivo
-    const newTx: Transaction = {
-      id: `t${Date.now()}`,
-      type: operationType === 'credit' ? 'receive' : 'send',
-      assetId: selectedAssetId,
-      amount: numAmount,
-      counterparty: `Admin • ${reason}`,
-      hash: generateTxHash(),
-      status: 'confirmed',
-      timestamp: Date.now(),
-    };
-
-    const updatedTransactions = [newTx, ...currentData.transactions];
-
-    saveUserData(selectedUser.id, {
-      holdings: updatedHoldings,
-      transactions: updatedTransactions,
-    });
-
-    setSuccessMsg(
-      `Saldo de ${numAmount} ${getMarket(selectedAssetId).symbol} ${operationType === 'credit' ? 'creditado' : 'debitado'} com sucesso!`
-    );
-
-    if (onRefreshActiveUser) {
-      onRefreshActiveUser();
+      if (onRefreshActiveUser) {
+        onRefreshActiveUser();
+      }
+    } finally {
+      setApplying(false);
     }
   }
 
-  function handleDeleteUser(userId: string) {
-    if (confirm('Deseja realmente remover este usuário da plataforma?')) {
-      deleteRegisteredUser(userId);
-      localStorage.removeItem(getUserStorageKey(userId));
-      setUsers(getRegisteredUsers());
+  async function handleDeleteUser(userId: string) {
+    if (!confirm('Deseja realmente remover este usuário da plataforma? (remove apenas o perfil)')) {
+      return;
+    }
+
+    const ok = await deleteProfile(userId);
+    if (ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
       if (selectedUser?.id === userId) setSelectedUser(null);
     }
   }
 
-  function handleResetUserWallet(userId: string) {
-    if (confirm('Deseja zerar a carteira deste usuário?')) {
-      saveUserData(userId, { holdings: [], transactions: [] });
+  async function handleResetUserWallet(userId: string) {
+    if (!confirm('Deseja zerar a carteira deste usuário?')) return;
+
+    const ok = await resetUserWallet(userId);
+    if (ok) {
+      setSelectedHoldings([]);
+      setSelectedTxCount(0);
+      setUserStats((prev) => ({
+        ...prev,
+        [userId]: { totalValue: 0, txCount: 0, holdings: [] },
+      }));
       setSuccessMsg('Carteira do usuário foi zerada.');
       if (onRefreshActiveUser) onRefreshActiveUser();
     }
@@ -183,7 +227,6 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
         </div>
       </div>
 
-      {/* Cards de Métricas da Plataforma */}
       <section className="grid gap-4 sm:grid-cols-3 mb-8">
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center justify-between text-white/40 mb-3">
@@ -213,12 +256,13 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
         </div>
       </section>
 
-      {/* Tabela de Gestão de Usuários */}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
             <h2 className="font-semibold text-lg">Contas de Clientes</h2>
-            <p className="text-xs text-white/40">Selecione um cliente para inserir ou modificar valores na carteira dele.</p>
+            <p className="text-xs text-white/40">
+              Selecione um cliente para inserir ou modificar valores na carteira dele.
+            </p>
           </div>
 
           <div className="relative w-full sm:w-72">
@@ -226,14 +270,16 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
             <input
               type="text"
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por nome ou e-mail..."
               className="w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-4 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:border-white/30"
             />
           </div>
         </div>
 
-        {filteredUsers.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-sm text-white/40">Carregando usuários...</div>
+        ) : filteredUsers.length === 0 ? (
           <div className="py-12 text-center text-sm text-white/40">
             Nenhum usuário cadastrado encontrado.
           </div>
@@ -250,9 +296,12 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredUsers.map(user => {
-                  const data = loadUserData(user.id);
-                  const userTotal = data.holdings.reduce((sum, h) => sum + h.amount * getMarket(h.id).price, 0);
+                {filteredUsers.map((user) => {
+                  const stats = userStats[user.id] || {
+                    totalValue: 0,
+                    txCount: 0,
+                    holdings: [],
+                  };
 
                   return (
                     <tr key={user.id} className="hover:bg-white/[0.02] transition-colors">
@@ -261,7 +310,7 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-xs font-bold text-white">
                             {user.name
                               .split(' ')
-                              .map(p => p[0])
+                              .map((p) => p[0])
                               .slice(0, 2)
                               .join('')
                               .toUpperCase()}
@@ -286,8 +335,10 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                       </td>
 
                       <td className="py-4">
-                        <p className="font-semibold text-white">{money(userTotal, currency)}</p>
-                        <p className="text-xs text-white/40">{data.holdings.filter(h => h.amount > 0).length} ativos</p>
+                        <p className="font-semibold text-white">{money(stats.totalValue, currency)}</p>
+                        <p className="text-xs text-white/40">
+                          {stats.holdings.filter((h) => h.amount > 0).length} ativos
+                        </p>
                       </td>
 
                       <td className="py-4 text-xs text-white/40">
@@ -323,11 +374,12 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
         )}
       </section>
 
-      {/* Modal de Gestão de Saldo do Usuário Selecionado */}
       {selectedUser && (
-        <Modal title={`Gerenciar Carteira: ${selectedUser.name}`} onClose={() => setSelectedUser(null)}>
+        <Modal
+          title={`Gerenciar Carteira: ${selectedUser.name}`}
+          onClose={() => setSelectedUser(null)}
+        >
           <div className="space-y-5">
-            {/* Informações do usuário */}
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex items-center justify-between">
               <div>
                 <p className="text-xs text-white/40">Conta de Acesso</p>
@@ -344,12 +396,11 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
               </button>
             </div>
 
-            {/* Saldos atuais do usuário */}
             <div>
               <p className="text-xs font-medium text-white/50 mb-2">Saldos Atuais do Cliente</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 max-h-36 overflow-y-auto pr-1">
-                {markets.slice(0, 6).map(m => {
-                  const holding = selectedUserData.holdings.find(h => h.id === m.id);
+                {markets.slice(0, 6).map((m) => {
+                  const holding = selectedHoldings.find((h) => h.id === m.id);
                   const amount = holding?.amount || 0;
                   return (
                     <div key={m.id} className="rounded-xl border border-white/10 bg-black/30 p-2.5">
@@ -357,7 +408,9 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                         <span className="text-xs font-bold text-emerald-400">{m.symbol}</span>
                         <span className="text-[10px] text-white/40 truncate">{m.name}</span>
                       </div>
-                      <p className="text-sm font-semibold text-white truncate">{amount} {m.symbol}</p>
+                      <p className="text-sm font-semibold text-white truncate">
+                        {amount} {m.symbol}
+                      </p>
                       <p className="text-[10px] text-white/40">{money(amount * m.price, currency)}</p>
                     </div>
                   );
@@ -372,11 +425,14 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
               </div>
             )}
 
-            {/* Formulário de Lançamento de Saldo */}
-            <form onSubmit={handleApplyBalanceAdjustment} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-4">
-              <p className="text-xs font-semibold text-white uppercase tracking-wider">Novo Lançamento / Ajuste</p>
+            <form
+              onSubmit={handleApplyBalanceAdjustment}
+              className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-4"
+            >
+              <p className="text-xs font-semibold text-white uppercase tracking-wider">
+                Novo Lançamento / Ajuste
+              </p>
 
-              {/* Tipo de Operação (Creditar ou Debitar) */}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -404,15 +460,16 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                 </button>
               </div>
 
-              {/* Seleção do Ativo */}
               <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Ativo / Criptomoeda</label>
+                <label className="block text-xs font-medium text-white/50 mb-1.5">
+                  Ativo / Criptomoeda
+                </label>
                 <select
                   value={selectedAssetId}
-                  onChange={e => setSelectedAssetId(e.target.value)}
+                  onChange={(e) => setSelectedAssetId(e.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-[#070a0f] px-3.5 py-2 text-sm text-white outline-none focus:border-white/30"
                 >
-                  {markets.map(m => (
+                  {markets.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.symbol}) — Cotação: {money(m.price, currency)}
                     </option>
@@ -420,7 +477,6 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                 </select>
               </div>
 
-              {/* Quantidade a Lançar */}
               <div>
                 <label className="block text-xs font-medium text-white/50 mb-1.5">
                   Quantidade em {getMarket(selectedAssetId).symbol}
@@ -431,35 +487,31 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
                   min="0.000001"
                   required
                   value={amountInput}
-                  onChange={e => setAmountInput(e.target.value)}
+                  onChange={(e) => setAmountInput(e.target.value)}
                   placeholder="0.00"
                   className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-sm font-semibold text-white outline-none focus:border-white/30"
                 />
               </div>
 
-              {/* Motivo do Lançamento */}
               <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5">Motivo / Categoria</label>
-                <select
+                <label className="block text-xs font-medium text-white/50 mb-1.5">
+                  Motivo / Observação
+                </label>
+                <input
+                  type="text"
                   value={reason}
-                  onChange={e => setReason(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-[#070a0f] px-3.5 py-2 text-sm text-white outline-none focus:border-white/30"
-                >
-                  <option value="Depósito Aprovado">Depósito Aprovado</option>
-                  <option value="Rendimento Mensal">Rendimento Mensal</option>
-                  <option value="Aporte de Capital">Aporte de Capital</option>
-                  <option value="Bônus de Cadastro">Bônus de Cadastro</option>
-                  <option value="Ajuste Administrativo">Ajuste Administrativo</option>
-                  <option value="Saque Processado">Saque Processado</option>
-                </select>
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Ex: Depósito Aprovado"
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-sm text-white outline-none focus:border-white/30"
+                />
               </div>
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black hover:bg-white/90 active:scale-[0.99] transition-all"
+                disabled={applying}
+                className="w-full rounded-xl bg-white py-2.5 text-sm font-semibold text-black hover:bg-white/90 disabled:opacity-50"
               >
-                <Sparkles size={16} />
-                <span>Confirmar e Atualizar Carteira</span>
+                {applying ? 'Aplicando...' : 'Confirmar Lançamento'}
               </button>
             </form>
           </div>
