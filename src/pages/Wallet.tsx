@@ -69,6 +69,7 @@ export default function Wallet({
 
       <div className="mt-5">
         <QuickActions
+          isAdmin={isAdmin}
           onBuy={() => setModal('buy')}
           onReceive={() => setModal('receive')}
           onSend={() => setModal('send')}
@@ -98,13 +99,14 @@ export default function Wallet({
             <h2 className="font-semibold">Meus ativos</h2>
             {sorted.length === 0 ? (
               <div className="py-10 text-center text-sm text-white/40">
-                <p>Nenhum ativo na carteira ainda.</p>
+                <p>Nenhum saldo registrado nesta carteira.</p>
+                <p className="mt-1 text-xs text-white/30">Os valores creditados pelo administrador aparecerão aqui.</p>
                 <button
-                  onClick={() => setModal('buy')}
-                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-white/90"
+                  onClick={() => setModal(isAdmin ? 'buy' : 'receive')}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-white/90"
                 >
-                  <ShoppingBag size={14} />
-                  Comprar Criptomoeda
+                  {isAdmin ? <ShoppingBag size={14} /> : <PlusCircle size={14} />}
+                  {isAdmin ? 'Comprar Criptomoeda (Admin)' : 'Ver Endereço de Depósito'}
                 </button>
               </div>
             ) : (
