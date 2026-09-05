@@ -216,10 +216,7 @@ export default function Admin({ currency, onRefreshActiveUser }: AdminProps) {
     <>
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 border border-emerald-500/20 mb-2">
-            <ShieldCheck size={14} />
-            <span>Módulo de Controle Exclusivo do Administrador</span>
-          </div>
+          
           <h1 className="text-3xl font-bold tracking-tight">Painel Administrativo</h1>
           <p className="mt-1 text-sm text-white/50">
             Gerencie os clientes cadastrados e credite ou debite saldos diretamente nas carteiras.
